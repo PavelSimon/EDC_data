@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h1>EDC Data Visualization</h1>
+    
+    {% if message %}
+        <div class="alert alert-info">
+            {{ message }}
+        </div>
+    {% endif %}
+    
+    {% if plot %}
+        {{ plot | safe }}
+    {% endif %}
+</div>
+{% endblock %} 

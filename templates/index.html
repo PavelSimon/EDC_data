@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h1>EDC Data Scraper</h1>
+    
+    <form id="scrapeForm">
+        <div class="form-group">
+            <label for="start_date">Start Date:</label>
+            <input type="date" id="start_date" name="start_date" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="end_date">End Date:</label>
+            <input type="date" id="end_date" name="end_date" required>
+        </div>
+        
+        <button type="submit">Scrape Data</button>
+    </form>
+    
+    <div id="message"></div>
+</div>
+
+<script>
+document.getElementById('scrapeForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const formData = new FormData(e.target);
+    const response = await fetch('/scrape', {
+        method: 'POST',
+        body: formData
+    });
+    
+    const data = await response.json();
+    document.getElementById('message').textContent = data.message;
+});
+</script>
+{% endblock %} 
