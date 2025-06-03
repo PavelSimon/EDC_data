@@ -1,104 +1,102 @@
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
+import requests
 from bs4 import BeautifulSoup
-import pandas as pd
-from datetime import datetime
-import time
-import logging
-
-def setup_driver():
-    chrome_options = Options()
-    chrome_options.add_argument("--headless")  # Run in headless mode
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    
-    service = Service(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=chrome_options)
-    return driver
+from datetime import datetime, timedelta
+from flask import current_app
 
 def scrape_edc_data(start_date, end_date):
-    driver = None
-    try:
-        driver = setup_driver()
-        url = "https://okte.sk/sk/edc/zverejnovanie-udajov/aktivovana-agregovana-flexibilita-a-zdielanie-elektriny/"
-        
-        # Navigate to the page
-        driver.get(url)
-        time.sleep(2)  # Wait for page to load
-        
-        # Convert dates to required format
-        start_date_str = start_date.strftime("%d.%m.%Y")
-        end_date_str = end_date.strftime("%d.%m.%Y")
-        
-        # Find and fill date inputs
-        # Note: You'll need to adjust these selectors based on the actual website structure
+    """
+    Scrape EDC data from OKTE.sk for a given date range.
+    Returns a list of dictionaries containing the scraped data.
+    """
+    all_data = []
+    current_date = start_date
+    base_url = "https://okte.sk/sk/edc/zverejnovanie-udajov/aktivovana-agregovana-flexibilita-a-zdielanie-elektriny/"
+    
+    # Set up headers to mimic a browser
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Connection': 'keep-alive',
+    }
+    
+    # Create a session to maintain cookies
+    session = requests.Session()
+    
+    while current_date <= end_date:
         try:
-            start_date_input = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='date']"))
-            )
-            start_date_input.clear()
-            start_date_input.send_keys(start_date_str)
+            # Format date for the form (DD.MM.YYYY format as required by the website)
+            date_str = current_date.strftime('%d.%m.%Y')
+            current_app.logger.info(f"Attempting to scrape data for date: {date_str}")
             
-            # If there's a submit button, click it
-            submit_button = driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
-            submit_button.click()
+            # First, get the initial page to get any necessary cookies/tokens
+            response = session.get(base_url, headers=headers)
+            response.raise_for_status()
             
-            # Wait for the table to load
-            WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "table"))
-            )
+            # Prepare the form data for the date selection
+            form_data = {
+                'date': date_str,
+                'submit': 'Zobraziť'  # The submit button value
+            }
+            
+            print(f"form_data: {form_data}")
+            current_app.logger.info(f"Submitting form with data: {form_data}")
+            
+            # Submit the form with the date
+            response = session.post(base_url, data=form_data, headers=headers)
+            response.raise_for_status()
+            
+            # Parse HTML
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Find the data table
+            table = soup.find('table')
+            if not table:
+                current_app.logger.warning(f"No data table found for date {date_str}")
+                current_date += timedelta(days=1)
+                continue
+            
+            # Extract data from table rows
+            rows = table.find_all('tr')[1:]  # Skip header row
+            day_data = []
+            
+            for row in rows:
+                cols = row.find_all('td')
+                if len(cols) >= 4:
+                    try:
+                        time_period = cols[0].text.strip()
+                        positive_flexibility = float(cols[1].text.strip().replace(',', '.'))
+                        negative_flexibility = float(cols[2].text.strip().replace(',', '.'))
+                        shared_electricity = float(cols[3].text.strip().replace(',', '.'))
+                        
+                        day_data.append({
+                            'date': current_date,
+                            'time_period': time_period,
+                            'positive_flexibility': positive_flexibility,
+                            'negative_flexibility': negative_flexibility,
+                            'shared_electricity': shared_electricity
+                        })
+                    except (ValueError, IndexError) as e:
+                        current_app.logger.error(f"Error parsing row for date {date_str}: {str(e)}")
+                        continue
+            
+            if day_data:
+                all_data.extend(day_data)
+                current_app.logger.info(f"Successfully scraped {len(day_data)} records for {date_str}")
+            else:
+                current_app.logger.warning(f"No valid data found for date {date_str}")
+            
+        except requests.RequestException as e:
+            current_app.logger.error(f"Request error for date {date_str}: {str(e)}")
         except Exception as e:
-            logging.error(f"Error interacting with date inputs: {str(e)}")
-            return []
+            current_app.logger.error(f"Error scraping data for date {date_str}: {str(e)}")
         
-        # Get the page source after JavaScript execution
-        soup = BeautifulSoup(driver.page_source, 'html.parser')
-        
-        # Find the table with data
-        table = soup.find('table')
-        if not table:
-            logging.error("Table not found")
-            return []
-        
-        data = []
-        rows = table.find_all('tr')[1:]  # Skip header row
-        
-        for row in rows:
-            cols = row.find_all('td')
-            if len(cols) >= 4:
-                try:
-                    time_period = cols[0].text.strip()
-                    # Handle potential empty or invalid values
-                    positive_flex = float(cols[1].text.strip().replace(',', '.')) if cols[1].text.strip() else 0.0
-                    negative_flex = float(cols[2].text.strip().replace(',', '.')) if cols[2].text.strip() else 0.0
-                    shared_elec = float(cols[3].text.strip().replace(',', '.')) if cols[3].text.strip() else 0.0
-                    
-                    data.append({
-                        'date': start_date,
-                        'time_period': time_period,
-                        'positive_flexibility': positive_flex,
-                        'negative_flexibility': negative_flex,
-                        'shared_electricity': shared_elec
-                    })
-                except (ValueError, IndexError) as e:
-                    logging.error(f"Error parsing row: {str(e)}")
-                    continue
-        
-        if not data:
-            logging.error("No data found in table")
-            return []
-        
-        logging.info(f"Successfully scraped {len(data)} rows of data")
-        return data
-        
-    except Exception as e:
-        logging.error(f"Error during scraping: {str(e)}")
-        return []
-    finally:
-        if driver:
-            driver.quit() 
+        # Move to next day
+        current_date += timedelta(days=1)
+    
+    if not all_data:
+        current_app.logger.warning("No data was collected for the entire date range")
+    else:
+        current_app.logger.info(f"Total records collected: {len(all_data)}")
+    
+    return all_data 
