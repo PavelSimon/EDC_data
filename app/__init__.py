@@ -59,7 +59,7 @@ def create_app():
     logging.getLogger('werkzeug').addHandler(file_handler)
     
     # Configure SQLite database
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///edc_data.db'
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///okte_data.db'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     
     # Initialize database

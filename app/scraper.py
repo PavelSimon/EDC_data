@@ -64,17 +64,17 @@ def scrape_edc_data(start_date, end_date):
                 cols = row.find_all('td')
                 if len(cols) >= 4:
                     try:
-                        time_period = cols[0].text.strip()
-                        positive_flexibility = float(cols[1].text.strip().replace(',', '.'))
-                        negative_flexibility = float(cols[2].text.strip().replace(',', '.'))
-                        shared_electricity = float(cols[3].text.strip().replace(',', '.'))
+                        zuctovacia_perioda = cols[0].text.strip()
+                        aktivovana_agregovana_flexibilita_kladna = float(cols[1].text.strip().replace(',', '.'))
+                        aktivovana_agregovana_flexibilita_zaporna = float(cols[2].text.strip().replace(',', '.'))
+                        zdielana_elektrina = float(cols[3].text.strip().replace(',', '.'))
                         
                         day_data.append({
-                            'date': current_date,
-                            'time_period': time_period,
-                            'positive_flexibility': positive_flexibility,
-                            'negative_flexibility': negative_flexibility,
-                            'shared_electricity': shared_electricity
+                            'datum': current_date,
+                            'zuctovacia_perioda': zuctovacia_perioda,
+                            'aktivovana_agregovana_flexibilita_kladna': aktivovana_agregovana_flexibilita_kladna,
+                            'aktivovana_agregovana_flexibilita_zaporna': aktivovana_agregovana_flexibilita_zaporna,
+                            'zdielana_elektrina': zdielana_elektrina
                         })
                     except (ValueError, IndexError) as e:
                         current_app.logger.error(f"Error parsing row for date {date_str}: {str(e)}")
